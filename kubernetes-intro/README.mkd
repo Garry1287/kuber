@@ -1,0 +1,49 @@
+# Введение в k8s. Настройка локального окружения. Запуск первого контейнера. Работа с kubectl
+`export USER_NAME=garry1287`
+
+```
+cd /devops_learn/kuber/kubernetes-intro/web
+docker login
+docker build -t $USER_NAME/nginx-4kuber:latest .
+docker push $USER_NAME/nginx-4kuber:latest
+```
+```
+export KUBECONFIG=~/.kube/config:/home/garry/devops_learn/kubespray/inventory/mycluster/artifacts/admin.conf
+source <(kubectl completion bash)
+```
+
+`minikube start`
+
+`kubectl apply -f web-pod.yaml`
+
+
+Получили образ
+`docker pull evgeniim/hipster-frontend`
+
+Переименовываем 
+`docker tag evgeniim/hipster-frontend:latest garry1278/hipster-frontend:latest`
+
+Список всех образов
+`docker images -a`
+
+Удаляем старый
+`docker rmi evgeniim/hipster-frontend`
+
+Пушим свой образ
+`docker push  garry1287/hipster-frontend`
+
+Смотрим поды
+```
+kubectl apply -f fronted-pod-healthy.yaml
+kubectl get pods
+kubectl describe pod web
+```
+
+Запустили
+`kubectl port-forward --address 0.0.0.0 pod/web 8000:8000`
+
+
+Заработало
+`http://127.0.0.1:8000/index.html`
+
+[https://github.com/otus-kuber-2019-12/loktionovam_platform/blob/kubernetes-intro/doc/ex-2-kubernetes-intro.md](https://github.com/otus-kuber-2019-12/loktionovam_platform/blob/kubernetes-intro/doc/ex-2-kubernetes-intro.md)
