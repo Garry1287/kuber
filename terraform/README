@@ -1,0 +1,661 @@
+
+    Запущено создание кластера Kubernetes через web-консоль Google Cloud
+    Подготовлен контекст для подключения к кластеру gcloud container clusters get-credentials your-first-cluster-1 --zone europe-west3-b --project docker-123456
+    Убедился что в качестве текущего контекста выставлен контекст для подключения к кластеру GKE kubectl config current-context
+    Создан dev namespace kubectl apply -f ./kubernetes/reddit/dev-namespace.yml
+    Приложение задеплоено в namespace dev kubectl apply -f ./kubernetes/reddit/ -n dev
+    Добавлено правило разрешающее доступ по портам 30000-32767
+    Получены внешние адреса нод кластера kubectl get nodes -o wide
+    Получен порт публикации сервиса ui kubectl describe service ui -n dev | grep NodePort
+    Убедился, что сервис доступен по адресу http://<node-ip>:<NodePort>
+
+proofpic
+
+    Для кластера в GKE включен Dashboard (Cluster - Edit - Addons - Dashboard)
+    Запустил kubectl proxy, ui доступен http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/#!/login
+    Добавлены права для сервисного аккаунта kubectl create clusterrolebinding kubernetes-dashboard --clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard
+    Залогинился с токеном из kubectl config view
+
+HW26: Задание со *
+
+    Подготовил сценарий создания кластера при помощи terraform согласно рекомендациям.
+    Получил манифест для добавления прав доступа на kubernetes dashboard kubectl create clusterrolebinding kubernetes-dashboard --clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard -o yaml --dry-r
+
+
+
+
+    main.tf - основной конфиг, описывающий какие инстансы нам нужны
+    variables.tf - конфиг с описанием переменных и значениями по дефолту, если дефолтных значений нет, то они являются обязательными
+    terraform.tfvars - конфиг с значением переменных, часто является секретным, нужно с осторожностью пушить в публичные репозитарии
+    outputs.tf - описание выходных переменных, необязательный файл, но очень удобно вычленять нужные параметры из созданного инстанса, например IP созданного в облаке инстанса
+
+
+main.tf
+provider "google" {
+  credentials = file("~/account.json")
+  version     = "~> 2.5"
+  project     = var.gcp_project_id
+  region      = var.gcp_location
+}
+
+Что включает создание кластера через терраформ
+1. Настройка provider
+2.
+
+backend - для хранения tfstate файла
+firewall
+
+
+Сначала надо залогиниться или использовать файл из https://cloud.google.com/docs/authentication/production json и 
+```
+
+
+    In the Cloud Console, go to the Create service account key page.
+    Go to the Create Service Account Key page
+    From the Service account list, select New service account.
+    In the Service account name field, enter a name.
+
+    From the Role list, select Project > Owner.
+    Note: The Role field authorizes your service account to access resources. You can view and change this field later by using the Cloud Console. If you are developing a production app, specify more granular permissions than Project > Owner. For more information, see granting roles to service accounts.
+    Click Create. A JSON file that contains your key downloads to your computer.
+
+```
+
+Прописать его   
+provider "google" {
+  credentials = file("~/account.json")
+
+
+Или
+gcloud auth application-default login
+
+
+
+terraform init
+terraform plan
+terraform apply
+
+gcloud container clusters get-credentials k8s-platform --region us-west1 --project kuber-72586
+
+garry@home-pc:~/devops_learn/kuber/terraform$ kubectl config  get-contexts
+CURRENT   NAME                                             CLUSTER                                          AUTHINFO                                         NAMESPACE
+          gke_docker-257312_europe-west1-b_my-cluster-29   gke_docker-257312_europe-west1-b_my-cluster-29   gke_docker-257312_europe-west1-b_my-cluster-29   
+          gke_docker-257312_europe-west1_my-cluster-30     gke_docker-257312_europe-west1_my-cluster-30     gke_docker-257312_europe-west1_my-cluster-30     
+*         gke_kuber-72586_us-west1_k8s-platform            gke_kuber-72586_us-west1_k8s-platform            gke_kuber-72586_us-west1_k8s-platform            
+          minikube                                         minikube                                         minikube                                         
+garry@home-pc:~/devops_learn/kuber/terraform$ kubectl get nodes
+NAME                                               STATUS   ROLES    AGE     VERSION
+gke-k8s-platform-k8s-platform-pool-372857e5-4b43   Ready    <none>   6m51s   v1.16.13-gke.1
+gke-k8s-platform-k8s-platform-pool-5f273864-h9kb   Ready    <none>   6m53s   v1.16.13-gke.1
+gke-k8s-platform-k8s-platform-pool-895eb37e-6z86   Ready    <none>   6m55s   v1.16.13-gke.1
+
+
+
+
+
+ helm repo list
+NAME        URL                                             
+stable      https://kubernetes-charts.storage.googleapis.com
+jetstack    https://charts.jetstack.io             
+
+
+
+helm search repo stable 
+NAME                                    CHART VERSION   APP VERSION             DESCRIPTION                                       
+stable/acs-engine-autoscaler            2.2.2           2.1.1                   DEPRECATED Scales worker nodes within agent pools 
+stable/aerospike                        0.3.2           v4.5.0.5                A Helm chart for Aerospike in Kubernetes          
+stable/airflow                          7.3.0           1.10.10                 Airflow is a platform to programmatically autho...
+stable/ambassador                       5.3.2           0.86.1                  DEPRECATED A Helm chart for Datawire Ambassador   
+stable/anchore-engine                   1.6.9           0.7.2                   Anchore container analysis and policy evaluatio...
+stable/apm-server                       2.1.5           7.0.0                   The server receives data from the Elastic APM a...
+stable/ark                              4.2.2           0.10.2                  DEPRECATED A Helm chart for ark                   
+stable/artifactory                      7.3.1           6.1.0                   DEPRECATED Universal Repository Manager support...
+stable/artifactory-ha                   0.4.1           6.2.0                   DEPRECATED Universal Repository Manager support...
+stable/atlantis                         3.12.2          v0.14.0                 A Helm chart for Atlantis https://www.runatlant...
+stable/auditbeat                        1.1.0           6.7.0                   A lightweight shipper to audit the activities o...
+stable/aws-cluster-autoscaler           0.3.3                                   Scales worker nodes within autoscaling groups.    
+stable/aws-iam-authenticator            0.1.3           1.0                     A Helm chart for aws-iam-authenticator            
+stable/bitcoind                         1.0.0           0.17.1                  Bitcoin is an innovative payment network and a ...
+stable/bookstack                        1.2.1           0.27.5                  BookStack is a simple, self-hosted, easy-to-use...
+stable/buildkite                        0.2.4           3                       DEPRECATED Agent for Buildkite                    
+stable/burrow                           1.5.2           0.29.0                  Burrow is a permissionable smart contract machine 
+
+
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+Release "nginx-ingress" does not exist. Installing it now.
+NAME: nginx-ingress
+LAST DEPLOYED: Wed Aug  5 14:43:24 2020
+NAMESPACE: nginx-ingress
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+The nginx-ingress controller has been installed.
+It may take a few minutes for the LoadBalancer IP to be available.
+You can watch the status by running 'kubectl --namespace nginx-ingress get services -o wide -w nginx-ingress-controller'
+
+An example Ingress that makes use of the controller:
+
+  apiVersion: extensions/v1beta1
+  kind: Ingress
+  metadata:
+    annotations:
+      kubernetes.io/ingress.class: nginx
+    name: example
+    namespace: foo
+  spec:
+    rules:
+      - host: www.example.com
+        http:
+          paths:
+            - backend:
+                serviceName: exampleService
+                servicePort: 80
+              path: /
+    # This section is only required if TLS is to be enabled for the Ingress
+    tls:
+        - hosts:
+            - www.example.com
+          secretName: example-tls
+
+If TLS is enabled for the Ingress, a Secret containing the certificate and key must also be provided:
+
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: example-tls
+    namespace: foo
+  data:
+    tls.crt: <base64 encoded cert>
+    tls.key: <base64 encoded key>
+  type: kubernetes.io/tls
+
+
+
+
+
+
+
+ 2097  helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.11.1
+ 2098  helm search stable/nginx-ingress
+ 2099  helm search 
+ 2100  helm repo
+ 2101  helm repo list
+ 2102  helm search repo stable
+ 2103  helm search repo stable | less
+ 2104  helm repo list
+ 2105  helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+ 2106  man help
+ 2107  man helm
+ 2108  helm --help
+ 2109  helm uninstall nginx-ingress stable/nginx-ingress
+ 2110  helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+ 2111  ls
+ 2112  ls -al
+ 2113  cat '--namespace=nginx-ingress' 
+ 2114  ls -al
+ 2115  rm -rf ./*
+ 2116  ls
+ 2117  ls -al
+ 2118  minikube stop
+ 2119  ls
+ 2120  mkdir cert-manager
+ 2121  cd cert-manager/
+ 2122  ls
+ 2123  vi issuer-production.yaml
+ 2124  vi issuer-staging.yaml
+ 2125  ls
+ 2126  diff issuer-production.yaml issuer-staging.yaml 
+ 2127  kubectl get pods --namespace cert-manager
+ 2128  ls
+ 2129  kubectl apply -f issuer-staging.yaml 
+ 2130  cat issuer-staging.yaml 
+ 2131  kubectl delete -f issuer-staging.yaml 
+ 2132  kubectl apply -f issuer-staging.yaml -n cert-manager
+ 2133  kubectl get svc -n nginx-ingress
+ 2134  kubectl create ns chartmuseum
+ 2135  ls
+ 2136  cd ..
+ 2137  mkdir chartmuseum
+ 2138  cd chartmuseum/
+ 2139  vi values.yaml
+
+ 2141  helm search 
+ 2142  helm search repo stable/chartmuseum
+ 2143  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f values.yaml
+ 2144  ls
+ 2145  cat values.yaml 
+ 2146  ls
+ 2147  cd ..
+ 2148  ls
+ 2149  cd cert-manager/
+ 2150  ls
+ 2151  vi issuer-production.yaml 
+ 2152  curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+ 2153  kubectl get na
+ 2154  kubectl get ns
+ 2155  kubectl get all -ns cert-manager
+ 2156  kubectl get all ns cert-manager
+ 2157* kubectl get -
+ 2158  kubectl --help
+ 2159  kubectl get --help
+ 2160  kubectl get -A -ns cert-manager
+ 2161  kubectl get -A ns cert-manager
+ 2162  kubectl get -A nschartmuseum
+ 2163  kubectl get -A ns chartmuseum
+ 2164  kubectl get -A 
+ 2165  kubectl get -A
+ 2166  kubectl -n cert-manager get certificate
+ 2167  history
+
+
+
+
+
+
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/cert-manager$ curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+* Server certificate:
+*  subject: CN=chartmuseum.35.227.140.123.nip.io
+*  start date: Aug  6 07:37:12 2020 GMT
+*  expire date: Nov  4 07:37:12 2020 GMT
+*  issuer: CN=Fake LE Intermediate X1
+*  SSL certificate verify result: unable to get local issuer certificate (20), continuing anyway.
+* Using HTTP2, server supports multi-use
+* Connection state changed (HTTP/2 confirmed)
+* Copying HTTP/2 data in stream buffer to connection buffer after upgrade: len=0
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* Using Stream ID: 1 (easy handle 0x558b603523f0)
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (IN), TLS Unknown, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.3 (IN), TLS Unknown, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.3 (IN), TLS Unknown, Unknown (23):
+* Connection state changed (MAX_CONCURRENT_STREAMS updated)!
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (IN), TLS Unknown, Unknown (23):
+* Connection #0 to host chartmuseum.35.227.140.123.nip.io left intact
+
+
+
+
+
+
+
+
+ /^\*/ { if (cert) print }'
+* Server certificate:
+*  subject: O=cert-manager; CN=chartmuseum.35.227.140.123.nip.io
+*  start date: Aug  6 10:52:18 2020 GMT
+*  expire date: Nov  4 10:52:18 2020 GMT
+*  issuer: O=cert-manager; CN=cert-manager.local
+*  SSL certificate verify result: unable to get local issuer certificate (20), continuing anyway.
+* Using HTTP2, server supports multi-use
+* Connection state changed (HTTP/2 confirmed)
+* Copying HTTP/2 data in stream buffer to connection buffer after upgrade: len=0
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* Using Stream ID: 1 (easy handle 0x55b195f783f0)
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (IN), TLS Unknown, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.3 (IN), TLS Unknown, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.3 (IN), TLS Unknown, Unknown (23):
+* Connection state changed (MAX_CONCURRENT_STREAMS updated)!
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (IN), TLS Unknown, Unknown (23):
+* TLSv1.3 (IN), TLS Unknown, Unknown (23):
+* Connection #0 to host chartmuseum.35.227.140.123.nip.io left intact
+
+
+
+
+
+
+  https://rtfm.co.ua/terraform-primer-raboty-osnovnye-komandy-state-fajly-bekendy-moduli/
+  https://devopscube.com/setup-google-provider-backend-terraform/
+  https://www.terraform.io/docs/backends/index.html
+  https://linux-notes.org/terraform-backend-y-v-unix-linux/
+  https://ru.hexlet.io/blog/posts/terraform-bazovoe-ispolzovanie
+
+
+
+
+
+
+
+
+  helm upgrade --install harbor harbor/harbor --wait \
+--namespace=harbor \
+--version=1.4.2 \
+-f kubernetes-temp/harbor/values.yaml
+
+
+
+nip.io может оказаться забанен в cert-manager. Если у вас есть
+собственный домен - лучше использовать его, либо попробовать
+xip.io, либо переключиться на staging ClusterIssuer
+
+Обратите внимание, как helm3 хранит информацию о release:
+kubectl get secrets -n harbor -l owner=helm
+
+
+
+
+terraform plan
+terraform apply
+gcloud container clusters get-credentials k8s-platform --region us-west1 --project kuber-72586
+
+
+helm repo add stable https://kubernetes-charts.storage.googleapis.com
+kubectl create ns nginx-ingress
+helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+
+
+helm repo add jetstack https://charts.jetstack.io
+kubectl apply -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml
+kubectl create ns cert-manager
+kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"
+
+helm upgrade --install cert-manager jetstack/cert-manager --wait --namespace=cert-manager --version=0.9.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 2072  terraform plan
+ 2073  terraform apply
+ 2074  gcloud container clusters get-credentials k8s-platform --region us-west1 --project kuber-72586
+ 2075  kubectl show get-contexts
+ 2076  kubectl --help
+ 2077  kubectl config show get-contexts
+ 2078  kubectl config  get-contexts
+ 2079  kubectl get nodes
+ 2080  kubectl get pods
+ 2081  cd ..
+ 2082  git branch kubernetes-temp
+ 2083  git checkout kubernetes-temp
+ 2084  mkdir kubernetes-temp
+ 2085  cd kubernetes-temp/
+ 2086  ls
+ 2087  helm repo list
+ 2088  kubectl create ns nginx-ingress
+ 2089  helm upgrade --install nginx-ingress stable/nginx-ingress --wait --namespace=nginx-ingress --version=1.11.1
+ 2090  helm repo add jetstack https://charts.jetstack.io
+ 2091  kubectl apply -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml
+ 2092  kubectl create ns cert-manager
+ 2093  kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"
+ 2094  kubectl describe ns cert-manager
+ 2095  helm upgrade --install cert-manager jetstack/cert-manager --wait --namespace=cert-manager --version=0.9.0
+ 2096  helm upgrade --install nginx-ingress stable/nginx-ingress --wait > --namespace=nginx-ingress > --version=1.11.1
+ 2097  helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.11.1
+ 2098  helm search stable/nginx-ingress
+ 2099  helm search 
+ 2100  helm repo
+ 2101  helm repo list
+ 2102  helm search repo stable
+ 2103  helm search repo stable | less
+ 2104  helm repo list
+ 2105  helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+ 2106  man help
+ 2107  man helm
+ 2108  helm --help
+ 2109  helm uninstall nginx-ingress stable/nginx-ingress
+ 2110  helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+ 2111  ls
+ 2112  ls -al
+ 2113  cat '--namespace=nginx-ingress' 
+ 2114  ls -al
+ 2115  rm -rf ./*
+ 2116  ls
+ 2117  ls -al
+ 2118  minikube stop
+ 2119  ls
+ 2120  mkdir cert-manager
+ 2121  cd cert-manager/
+ 2122  ls
+ 2123  vi issuer-production.yaml
+ 2124  vi issuer-staging.yaml
+ 2125  ls
+ 2126  diff issuer-production.yaml issuer-staging.yaml 
+ 2127  kubectl get pods --namespace cert-manager
+ 2128  ls
+ 2129  kubectl apply -f issuer-staging.yaml 
+ 2130  cat issuer-staging.yaml 
+ 2131  kubectl delete -f issuer-staging.yaml 
+ 2132  kubectl apply -f issuer-staging.yaml -n cert-manager
+ 2133  kubectl get svc -n nginx-ingress
+ 2134  kubectl create ns chartmuseum
+ 2135  ls
+ 2136  cd ..
+ 2137  mkdir chartmuseum
+ 2138  cd chartmuseum/
+ 2139  vi values.yaml
+ 2140  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.3.2 -f values.yaml
+ 2141  helm search 
+ 2142  helm search repo stable/chartmuseum
+ 2143  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f values.yaml
+ 2144  ls
+ 2145  cat values.yaml 
+ 2146  ls
+ 2147  cd ..
+ 2148  ls
+ 2149  cd cert-manager/
+ 2150  ls
+ 2151  vi issuer-production.yaml 
+ 2152  curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+ 2153  kubectl get na
+ 2154  kubectl get ns
+ 2155  kubectl get all -ns cert-manager
+ 2156  kubectl get all ns cert-manager
+ 2157* kubectl get -
+ 2158  kubectl --help
+ 2159  kubectl get --help
+ 2160  kubectl get -A -ns cert-manager
+ 2161  kubectl get -A ns cert-manager
+ 2162  kubectl get -A nschartmuseum
+ 2163  kubectl get -A ns chartmuseum
+ 2164  kubectl get -A 
+ 2165  kubectl get -A
+ 2166  kubectl -n cert-manager get certificate
+ 2167  history
+ 2168  kubectl -n cert-manager get certificate
+ 2169  kubectl get ns
+ 2170  kubectl -n chartmuseum get certificate
+ 2171  kubectl -n chartmuseum get certificate chartmuseum-tls
+ 2172  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2173  ls
+ 2174  kubectl -n chartmuseum -f  get -A
+ 2175  kubectl -n chartmuseum  get -A
+ 2176  kubectl -n chartmuseum  get all
+ 2177  kubectl -n chartmuseum detele certificate chartmuseum-tls
+ 2178  kubectl -n chartmuseum delete certificate chartmuseum-tls
+ 2179  ls
+ 2180  kubectl -n cert-manager get issuer
+ 2181  kubectl -n cert-manager delete -f issuer-staging.yaml
+ 2182* kubectl -n cert-manager apply -f issuer-produ
+ 2183  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2184  kubectl -n cert-manager delete -f issuer-staging.yaml
+ 2185  kubectl -n chartmuseum delete certificate chartmuseum-tls
+ 2186  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2187  kubectl -n chartmuseum get pods
+ 2188  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2189  kubectl -n cert-manager get issuer
+ 2190  kubectl --help
+ 2191* kubectl -n 
+ 2192  kubectl -n chartmuseum get pods
+ 2193  kubectl -n chartmuseum delete chartmuseum-chartmuseum-6bd778544b-8z6vs
+ 2194  kubectl -n chartmuseum delete pods chartmuseum-chartmuseum-6bd778544b-8z6vs
+ 2195  kubectl -n chartmuseum get pods
+ 2196  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2197  kubectl -n chartmuseum get pods
+ 2198  kubectl -n chartmuseum describe issuer
+ 2199  kubectl -n chartmuseum get issuer
+ 2200  kubectl -n cert-manager get issuer
+ 2201  kubectl -n cert-manager describe cert-manager-webhook-ca
+ 2202  kubectl -n cert-manager describe issuer cert-manager-webhook-ca
+ 2203  kubectl -n cert-manager describe issuer cert-manager-webhook-selfsign
+ 2204  ls
+ 2205  cat issuer-production.yaml 
+ 2206  kubectl get ns
+ 2207  kubectl -n nginx-ingress get pods
+ 2208* kubectl -n nginx-i
+ 2209  kubectl -n chartmuseum get ingress
+ 2210  kubectl -n chartmuseum delete ingress chartmuseum-chartmuseum
+ 2211  kubectl -n chartmuseum get ingress
+ 2212  ls
+ 2213  cd ..
+ 2214  ls
+ 2215  cd chartmuseum/
+ 2216  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f values.yaml
+ 2217  kubectl -n chartmuseum get ingress
+ 2218  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2219  cd .
+ 2220  cd ..
+ 2221* kubectl -n cert-manager -f cert-manager/issuer-production.yaml 
+ 2222  kubectl -n cert-manager describe clusterissuer.certmanager.k8s.io/letsencrypt-production
+ 2223  cat chartmuseum/values.yaml 
+ 2224  vi chartmuseum/values.yaml 
+ 2225  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f values.yaml
+ 2226  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2227  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2228  kubectl -n chartmuseum delete certificate chartmuseum-tls
+ 2229  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2230  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2231  vi chartmuseum/values.yaml 
+ 2232  kubectl -n chartmuseum get ingress
+ 2233  kubectl -n chartmuseum describe ingress chartmuseum-chartmuseum
+ 2234  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2235  ls
+ 2236  cat cert-manager/issuer-production.yaml 
+ 2237  cat cert-manager/issuer-staging.yaml 
+ 2238  kubectl -n chartmuseum describe ClusterIssuer letsencrypt-production
+ 2239  kubectl -n chartmuseum describe ClusterIssuer letsencrypt-staging
+ 2240  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2241  ls
+ 2242  cd chartmuseum/
+ 2243  ls
+ 2244  vi values.yaml 
+ 2245  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2246  cd ..
+ 2247  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2248  kubectl -n chartmuseum describe certificate chartmuseum-tls
+ 2249  kubectl -n chartmuseum describe certificate chartmuseum2-tls
+ 2250  curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+ 2251  kubectl -n chartmuseum describe certificate chartmuseum2-tls
+ 2252  kubectl -n chartmuseum describe ClusterIssuer letsencrypt-staging
+ 2253  kubectl -n chartmuseum describe ClusterIssuer letsencrypt-production
+ 2254  kubectl -n chartmuseum describe certificate chartmuseum2-tls
+ 2255  curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+ 2256  helm --help
+ 2257  helm uninstall --purge chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2258  helm uninstall chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2259  helm uninstall chartmuseum stable/chartmuseum  --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2260  helm uninstall chartmuseum stable/chartmuseum  --namespace=chartmuseum
+ 2261  kubectl delete -n chartmuseum
+ 2262  kubectl delete ns chartmuseum
+ 2263  kubectl create ns chartmuseum
+ 2264  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2265  helm ls -n chartmuseum
+ 2266  kubectl -n chartmuseum describe certificate chartmuseum2-tls
+ 2267  ld
+ 2268  ls
+ 2269  vi cert-manager/issuer-production.yaml 
+ 2270  ls
+ 2271  cd chartmuseum/
+ 2272  ls
+ 2273  vi values.yaml 
+ 2274  cd ..
+ 2275  kubectl delete ns chartmuseum
+ 2276  kubectl -n cert-manager delete -f cert-manager/issuer-production.yaml 
+ 2277  kubectl -n cert-manager get -A
+ 2278  kubectl get A
+ 2279  kubectl get -A
+ 2280  ls
+ 2281  kubectl get ns cert-manager
+ 2282  kubectl ns cert-manager get pods
+ 2283  kubectl ns cert-manager get issuer
+ 2284  kubectl -n cert-manager get issuer
+ 2285  kubectl ns cert-manager get Customissuer
+ 2286  kubectl ns cert-manager get CustomIssuer
+ 2287  kubectl -n chartmuseum describe ClusterIssuer letsencrypt-production
+ 2288  kubectl -n cert-manager describe ClusterIssuer letsencrypt-production
+ 2289  kubectl -n cert-manager describe ClusterIssuer letsencrypt-staging
+ 2290  kubectl -n cert-manager apply -f cert-manager/issuer-production.yaml 
+ 2291  kubectl create ns chartmuseum
+ 2292  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2293  kubectl -n chartmuseum describe certificate chartmuseum2-tls
+ 2294  kubectl -n chartmuseum describe certificate chartmuseum3-tls
+ 2295  curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+ 2296  kubectl create ns chartmuseum
+ 2297  ls
+ 2298  kubectl create ns chartmuseum
+ 2299  kubectl delete ns chartmuseum
+ 2300  kubectl -n cert-manager delete -f cert-manager/issuer-production.yaml 
+ 2301  kubectl -n cert-manager apply -f cert-manager/issuer-staging.yaml 
+ 2302  kubectl create ns chartmuseum
+ 2303  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2304  curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+ 2305  helm repo add chartmuseum chartmuseum.35.227.140.123.nip.io
+ 2306  helm repo add chartmuseum https://chartmuseum.35.227.140.123.nip.io
+ 2307  kubectl delete ns chartmuseum
+ 2308  kubectl -n cert-manager delete -f cert-manager/issuer-staging.yaml 
+ 2309  kubectl -n cert-manager apply -f cert-manager/
+ 2310  kubectl get svc -n nginx-ingress
+ 2311  kubectl create ns chartmuseum
+ 2312  kubectl -n chartmuseum get -A
+ 2313  kubectl get -A
+ 2314  kubectl get all -A
+ 2315  ls
+ 2316  vi chartmuseum/values.yaml 
+ 2317  kubectl create ns chartmuseum
+ 2318  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2319  vi chartmuseum/values.yaml 
+ 2320  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2321  kubectl delete ns chartmuseum
+ 2322  kubectl create ns chartmuseum
+ 2323  helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f chartmuseum/values.yaml
+ 2324  helm repo add chartmuseum chartmuseum.35.227.140.123.nip.io
+ 2325  helm repo add chartmuseum https://chartmuseum.35.227.140.123.nip.io
+ 2326  ls
+ 2327  mkdir harbor
+ 2328  cd harbor/
+ 2329  vi values.yaml
+ 2330  helm repo add harbor https://helm.goharbor.io
+ 2331  cd ..
+ 2332  kubectl create ns harbor
+ 2333  helm search
+ 2334  helm search repo harbor
+ 2335  helm upgrade --install harbor harbor/harbor --wait --namespace=harbor --version=1.1.2 \
+ 2336  cd ..
+ 2337  ls
+ 2338  cat kubernetes-temp/harbor/values.yaml 
+ 2339  kubectl delete ns harbor
+ 2340  kubectl delete ns ns cert-manager
+ 2341  kubectl delete ns cert-manager
+ 2342  kubectl get ns 
+ 2343  ls
+ 2344  cd terraform/
+ 2345  ls
+ 2346  terraform destroy
+ 2347  terraform apply
+ 2348  gcloud container clusters get-credentials k8s-platform --region us-west1 --project kuber-72586
+ 2349  kubectl get nodes
+ 2350  history
