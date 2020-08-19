@@ -1,0 +1,962 @@
+
+  https://rtfm.co.ua/terraform-primer-raboty-osnovnye-komandy-state-fajly-bekendy-moduli/
+  https://devopscube.com/setup-google-provider-backend-terraform/
+  https://www.terraform.io/docs/backends/index.html
+  https://linux-notes.org/terraform-backend-y-v-unix-linux/
+  https://ru.hexlet.io/blog/posts/terraform-bazovoe-ispolzovanie
+
+
+Запускаем кластер
+```
+terraform plan
+terraform apply
+```
+
+Получаем доступ
+```
+gcloud container clusters get-credentials k8s-platform --region us-west1 --project kuber-72586
+```
+
+Добавляем helm repo
+```
+helm repo add stable https://kubernetes-charts.storage.googleapis.com
+helm repo add jetstack https://charts.jetstack.io
+```
+
+
+
+Список добавленных репо
+```
+ helm repo list
+NAME        URL                                             
+stable      https://kubernetes-charts.storage.googleapis.com
+jetstack    https://charts.jetstack.io             
+```
+
+Поиск  в repo
+
+```
+helm search repo stable 
+NAME                                    CHART VERSION   APP VERSION             DESCRIPTION                                       
+stable/acs-engine-autoscaler            2.2.2           2.1.1                   DEPRECATED Scales worker nodes within agent pools 
+stable/aerospike                        0.3.2           v4.5.0.5                A Helm chart for Aerospike in Kubernetes          
+stable/airflow                          7.3.0           1.10.10                 Airflow is a platform to programmatically autho...
+stable/ambassador                       5.3.2           0.86.1                  DEPRECATED A Helm chart for Datawire Ambassador   
+stable/anchore-engine                   1.6.9           0.7.2                   Anchore container analysis and policy evaluatio...
+stable/apm-server                       2.1.5           7.0.0                   The server receives data from the Elastic APM a...
+stable/ark                              4.2.2           0.10.2                  DEPRECATED A Helm chart for ark                   
+stable/artifactory                      7.3.1           6.1.0                   DEPRECATED Universal Repository Manager support...
+stable/artifactory-ha                   0.4.1           6.2.0                   DEPRECATED Universal Repository Manager support...
+stable/atlantis                         3.12.2          v0.14.0                 A Helm chart for Atlantis https://www.runatlant...
+stable/auditbeat                        1.1.0           6.7.0                   A lightweight shipper to audit the activities o...
+stable/aws-cluster-autoscaler           0.3.3                                   Scales worker nodes within autoscaling groups.    
+stable/aws-iam-authenticator            0.1.3           1.0                     A Helm chart for aws-iam-authenticator            
+stable/bitcoind                         1.0.0           0.17.1                  Bitcoin is an innovative payment network and a ...
+stable/bookstack                        1.2.1           0.27.5                  BookStack is a simple, self-hosted, easy-to-use...
+stable/buildkite                        0.2.4           3                       DEPRECATED Agent for Buildkite                    
+stable/burrow                           1.5.2           0.29.0                  Burrow is a permissionable smart contract machine 
+```
+
+Установка nginx-ingress из helm чарта
+```
+kubectl create ns nginx-ingress
+helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+```
+
+Установка cert-manager для генерации сертификатов
+```
+kubectl apply -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml
+kubectl create ns cert-manager
+kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"
+helm upgrade --install cert-manager jetstack/cert-manager --wait --namespace=cert-manager --version=0.9.0
+```
+
+
+
+Необходимо запустить issuer для выпуска, перевыпуска сертификатов
+
+kubectl apply -f issuer-staging.yaml -n cert-manager
+
+
+
+Устанавливаем chartmuseum - хранилище helm чартов из чарта.
+```
+kubectl create ns chartmuseum
+```
+Перед установкой необходимо отредактировать values.yaml
+```
+helm upgrade --install chartmuseum stable/chartmuseum --wait --namespace=chartmuseum --version=2.13.1 -f values.yaml
+```
+
+В values в основном настройка nginx-ingress, сайт делаем через nip.io или xip.io 
+Ip узнаем из kubectl get svc -n ...
+
+Это от тестового issuer
+```
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/cert-manager$ curl --insecure -v https://chartmuseum.35.227.140.123.nip.io 2>&1 | awk 'BEGIN { cert=0 } /^\* Server certificate:/ { cert=1 } /^\*/ { if (cert) print }'
+* Server certificate:
+*  subject: CN=chartmuseum.35.227.140.123.nip.io
+*  start date: Aug  6 07:37:12 2020 GMT
+*  expire date: Nov  4 07:37:12 2020 GMT
+*  issuer: CN=Fake LE Intermediate X1
+*  SSL certificate verify result: unable to get local issuer certificate (20), continuing anyway.
+* Using HTTP2, server supports multi-use
+* Connection state changed (HTTP/2 confirmed)
+* Copying HTTP/2 data in stream buffer to connection buffer after upgrade: len=0
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* Using Stream ID: 1 (easy handle 0x558b603523f0)
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (IN), TLS Unknown, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.3 (IN), TLS Unknown, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.3 (IN), TLS Unknown, Unknown (23):
+* Connection state changed (MAX_CONCURRENT_STREAMS updated)!
+* TLSv1.3 (OUT), TLS Unknown, Unknown (23):
+* TLSv1.3 (IN), TLS Unknown, Unknown (23):
+* Connection #0 to host chartmuseum.35.227.140.123.nip.io left intact
+```
+
+
+
+Дальше устанавливаем harbor
+```
+  helm upgrade --install harbor harbor/harbor --wait \
+--namespace=harbor \
+--version=1.4.2 \
+-f kubernetes-temp/harbor/values.yaml
+```
+
+
+nip.io может оказаться забанен в cert-manager. Если у вас есть
+собственный домен - лучше использовать его, либо попробовать
+xip.io, либо переключиться на staging ClusterIssuer
+
+Обратите внимание, как helm3 хранит информацию о release:
+kubectl get secrets -n harbor -l owner=helm
+
+
+Свой чарты в harbor не кидал.
+
+
+Смотрим, что внутри
+```
+ 2284  kubectl -n cert-manager get issuer
+ 2287  kubectl -n chartmuseum describe ClusterIssuer letsencrypt-production
+ 2288  kubectl -n cert-manager describe ClusterIssuer letsencrypt-production
+ 2289  kubectl -n cert-manager describe ClusterIssuer letsencrypt-staging
+ 2290  kubectl -n cert-manager apply -f cert-manager/issuer-production.yaml 
+```
+
+
+### helmfile - неосилил синтаксис до конца.
+Есть prehook, posthook
+Работает через объявленные темплейты и подстановку переменных в целом.
+
+
+
+
+### Написание своего helm chart
+
+
+
+Создаем helm-chart
+ 2797  helm create kubernetes-temp/socks-shop
+ 2798  ls
+ 2799  cd kubernetes-temp/
+ 2800  ls
+ 2801  cd socks-shop/
+ 2802  kls
+ 2803  ls
+ 2804  cat values.yaml 
+ 2805  ls
+ 2806  ды
+ 2807  ls
+ 2808  rm -rf  templates/*
+ 2809  rm -rf values.yaml 
+ 2810  cd templates/
+ 2811  vi all.yaml
+ 2812  cd ..
+ 2813  helm upgrade --install socks-shop kubernetes-temp/socks-shop
+ 2814  kubectl config get-contexts
+ 2815  minikube stop
+ 2816  gcloud container clusters get-credentials k8s-platform --region us-west1 --project kuber-72586
+ 2817  kubectl config get-contexts
+ 2818  helm upgrade --install socks-shop kubernetes-temp/socks-shop
+ 2819  vi kubernetes-temp/socks-shop/templates/all.yaml
+ 2820  helm upgrade --install socks-shop kubernetes-temp/socks-shop
+ 2821  vi kubernetes-temp/socks-shop/templates/all.yaml
+ 2822  helm upgrade --install socks-shop kubernetes-temp/socks-shop
+ 2823  kubectl get pods
+ 2824  helm create kubernetes-temp/frontend
+ 2825  cd kubernetes-temp/frontend
+ 2826  ls
+ 2827  rm values.yaml 
+ 2828  cd templates/
+ 2829  ls
+ 2830  rm -rf ./*
+ 2831  ls
+ 2832  touch deployment.yaml
+ 2833  touch service.yaml
+ 2834  touch ingress.yaml
+ 2835  kubectl create ns hipster-shop
+ 2836  kubectl get service
+ 2837  kubectl create ns nginx-ingress
+ 2838  helm upgrade --install nginx-ingress stable/nginx-ingress --wait  --namespace=nginx-ingress  --version=1.41.2
+ 2839  kubectl --namespace nginx-ingress get services -o wide -w nginx-ingress-controller
+ 2840  kubectl get nodes
+ 2841  kubectl get pods
+ 2842  kubectl get pods -n nginx-ingress
+ 2843  kubectl get all -A -n nginx-ingress
+ 2844  kubectl get service nginx-ingress-controller
+ 2845  kubectl get service nginx-ingress-controller -n nginx-ingress
+ 2846  kubectl get describe nginx-ingress-controller -n nginx-ingress
+ 2847  kubectl describe nginx-ingress-controller -n nginx-ingress
+ 2848  kubectl describe service nginx-ingress-controller -n nginx-ingress
+ 2849  kubectl describe service nginx-ingress-controller -n nginx-ingress -o yml
+ 2850* kubectl describe service nginx-ingress-controller -n nginx-ingress  yaml
+ 2851  kubectl get describe nginx-ingress-controller -n nginx-ingress -o yaml
+ 2852  kubectl get service nginx-ingress-controller -n nginx-ingress -o yaml
+ 2853  kubectl get service nginx-ingress-default-backend -n nginx-ingress -o yaml
+ 2854  kubect get deployment nginx-ingress-controller 
+ 2855  kubectl get deployment nginx-ingress-controller 
+ 2856  kubect get deployment nginx-ingress-controller -n nginx-ingress
+ 2857  kubectl get deployment nginx-ingress-controller -n nginx-ingress
+ 2858  kubectl describe deployment nginx-ingress-controller -n nginx-ingress
+ 2859  kubectl get deployment nginx-ingress-controller -n nginx-ingress -o yaml
+ 2860  kubectl get deployment nginx-ingress-default-backend  -n nginx-ingress -o yaml
+
+
+
+
+
+
+
+
+
+
+
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ helm repo update
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈ Happy Helming!⎈ 
+
+
+
+
+
+.
+garry@home-pc:~/devops_learn/kuber$ helm create kubernetes-temp/socks-shop
+Creating kubernetes-temp/socks-shop
+garry@home-pc:~/devops_learn/kuber$ ls
+kuber-controllers  kubernetes-intro  kubernetes-networks  kubernetes-temp  kuber-security  kuber-volumes  microservices-demo  README.md  terraform
+garry@home-pc:~/devops_learn/kuber$ cat kubernetes-temp/socks-shop/
+charts/      Chart.yaml   .helmignore  templates/   values.yaml  
+garry@home-pc:~/devops_learn/kuber$ ls kubernetes-temp/socks-shop/
+charts  Chart.yaml  templates  values.yaml
+garry@home-pc:~/devops_learn/kuber$ ls kubernetes-temp/socks-shop/templates/
+all.yaml  deployment.yaml  _helpers.tpl  hpa.yaml  ingress.yaml  NOTES.txt  serviceaccount.yaml  service.yaml  tests
+garry@home-pc:~/devops_learn/kuber$ ls kubernetes-temp/socks-shop/templates/all.yaml 
+kubernetes-temp/socks-shop/templates/all.yaml
+garry@home-pc:~/devops_learn/kuber$ cd  kubernetes-temp/socks-shop/templates/
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ ls
+all.yaml  deployment.yaml  _helpers.tpl  hpa.yaml  ingress.yaml  NOTES.txt  serviceaccount.yaml  service.yaml  tests
+
+
+
+
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ helm repo list
+NAME    	URL                                             
+stable  	https://kubernetes-charts.storage.googleapis.com
+jetstack	https://charts.jetstack.io                      
+harbor  	https://helm.goharbor.io                        
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ ls
+all.yaml  deployment.yaml  _helpers.tpl  hpa.yaml  ingress.yaml  NOTES.txt  serviceaccount.yaml  service.yaml  tests
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ mv all.yaml all.yml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ rm -rf *.yaml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ ls
+all.yml  _helpers.tpl  NOTES.txt  tests
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ rm _helpers.tpl 
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ rm NOTES.txt 
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ rm -rf tests/
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ ls
+all.yml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ cd ..
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop$ ls
+charts  Chart.yaml  templates  values.yaml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop$ rm -rf values.yaml 
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop$ ls
+charts  Chart.yaml  templates
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop$ cd ..
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ cd ..
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+Release "socks-shop" does not exist. Installing it now.
+NAME: socks-shop
+LAST DEPLOYED: Fri Aug 14 10:21:44 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install fronted kubernetes-temp/fronted --namespace hipster-shop
+Release "fronted" does not exist. Installing it now.
+
+
+
+  
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install frontend kubernetes-temp/frontend --namespace hipster-shop
+Release "frontend" does not exist. Installing it now.
+NAME: frontend
+LAST DEPLOYED: Fri Aug 14 10:27:02 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+garry@home-pc:~/devops_learn/kuber$ kubectl get service --namespace hipster-shop
+NAME                        TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+adservice                   ClusterIP   10.27.255.210   <none>        9555/TCP         5m32s
+cartservice                 ClusterIP   10.27.242.183   <none>        7070/TCP         5m32s
+checkoutservice             ClusterIP   10.27.253.187   <none>        5050/TCP         5m32s
+cm-acme-http-solver-gf4w8   NodePort    10.27.242.246   <none>        8089:30217/TCP   16s
+currencyservice             ClusterIP   10.27.253.200   <none>        7000/TCP         5m32s
+emailservice                ClusterIP   10.27.246.39    <none>        5000/TCP         5m32s
+frontend                    NodePort    10.27.255.155   <none>        80:30405/TCP     19s
+paymentservice              ClusterIP   10.27.253.66    <none>        50051/TCP        5m32s
+productcatalogservice       ClusterIP   10.27.246.141   <none>        3550/TCP         5m32s
+recommendationservice       ClusterIP   10.27.252.39    <none>        8080/TCP         5m32s
+redis-cart                  ClusterIP   10.27.246.177   <none>        6379/TCP         5m32s
+shippingservice             ClusterIP   10.27.254.86    <none>        50051/TCP        5m32s
+garry@home-pc:~/devops_learn/kuber$ kubectl get all -A --namespace hipster-shop
+NAMESPACE       NAME                                                              READY   STATUS    RESTARTS   AGE
+cert-manager    pod/cert-manager-5466dd7cf6-xx5kn                                 1/1     Running   0          52m
+cert-manager    pod/cert-manager-cainjector-6f567dc88f-qqxlh                      1/1     Running   0          52m
+cert-manager    pod/cert-manager-webhook-67cc6df6-wxfzr                           1/1     Running   0          52m
+hipster-shop    pod/adservice-55f9757757-h79rw                                    1/1     Running   0          5m52s
+hipster-shop    pod/cartservice-7456d5d86d-97qkh                                  1/1     Running   0          5m52s
+hipster-shop    pod/checkoutservice-6fcc84467f-l22hn                              1/1     Running   0          5m51s
+hipster-shop    pod/currencyservice-8b7b8c647-84hzw                               1/1     Running   0          5m51s
+hipster-shop    pod/emailservice-6c46854ccc-nxcn6                                 1/1     Running   0          5m52s
+hipster-shop    pod/frontend-745f64f8b6-v5kjp                                     1/1     Running   0          38s
+hipster-shop    pod/paymentservice-76654769f7-zjlfr                               1/1     Running   0          5m52s
+hipster-shop    pod/productcatalogservice-d564bdf4c-jvwgl                         1/1     Running   0          5m52s
+hipster-shop    pod/recommendationservice-76598d5889-pjx62                        1/1     Running   0          5m52s
+hipster-shop    pod/redis-cart-5f59546cdd-k8hcw                                   1/1     Running   0          5m52s
+hipster-shop    pod/shippingservice-b6db65f7f-t4snd                               1/1     Running   0          5m52s
+kube-system     pod/calico-node-6rqdm                                             1/1     Running   0          5m12s
+kube-system     pod/calico-node-fsv2w                                             1/1     Running   0          74m
+kube-system     pod/calico-node-jg85f                                             1/1     Running   0          73m
+kube-system     pod/calico-node-p4rfz                                             1/1     Running   0          73m
+kube-system     pod/calico-node-vertical-autoscaler-bcc7978d-km8w9                1/1     Running   0          78m
+kube-system     pod/calico-typha-5cdd59dc44-h58vp                                 1/1     Running   0          74m
+kube-system     pod/calico-typha-horizontal-autoscaler-7cd7856b7b-fwkhc           1/1     Running   0          78m
+kube-system     pod/calico-typha-vertical-autoscaler-7c4b89c9-mrdkc               1/1     Running   0          78m
+kube-system     pod/event-exporter-gke-59b99fdd9c-cl47n                           2/2     Running   0          78m
+kube-system     pod/fluentd-gke-9wtft                                             2/2     Running   0          72m
+kube-system     pod/fluentd-gke-bqslj                                             2/2     Running   0          73m
+kube-system     pod/fluentd-gke-pt5t2                                             2/2     Running   0          5m12s
+kube-system     pod/fluentd-gke-rf7tg                                             2/2     Running   0          72m
+kube-system     pod/fluentd-gke-scaler-cd4d654d7-mxctr                            1/1     Running   0          78m
+kube-system     pod/gke-metrics-agent-28pn2                                       1/1     Running   0          75m
+kube-system     pod/gke-metrics-agent-8ljb2                                       1/1     Running   0          75m
+kube-system     pod/gke-metrics-agent-lmqjz                                       1/1     Running   0          75m
+kube-system     pod/gke-metrics-agent-vl6hf                                       1/1     Running   0          5m12s
+kube-system     pod/ip-masq-agent-bqzr4                                           1/1     Running   0          75m
+kube-system     pod/ip-masq-agent-fj6kc                                           1/1     Running   0          75m
+kube-system     pod/ip-masq-agent-kmmz8                                           1/1     Running   0          5m12s
+kube-system     pod/ip-masq-agent-n9rwm                                           1/1     Running   0          75m
+kube-system     pod/kube-dns-7c976ddbdb-68sdj                                     4/4     Running   0          78m
+kube-system     pod/kube-dns-7c976ddbdb-plbdr                                     4/4     Running   0          74m
+kube-system     pod/kube-dns-autoscaler-645f7d66cf-cgqpd                          1/1     Running   0          78m
+kube-system     pod/kube-proxy-gke-k8s-platform-k8s-platform-pool-0ad24dfe-3g0c   1/1     Running   0          75m
+kube-system     pod/kube-proxy-gke-k8s-platform-k8s-platform-pool-36d850b1-xcwg   1/1     Running   0          75m
+kube-system     pod/kube-proxy-gke-k8s-platform-k8s-platform-pool-d7b5b1e7-197c   1/1     Running   0          5m12s
+kube-system     pod/kube-proxy-gke-k8s-platform-k8s-platform-pool-d7b5b1e7-nvw6   1/1     Running   0          75m
+kube-system     pod/l7-default-backend-678889f899-kx6tz                           1/1     Running   0          78m
+kube-system     pod/metrics-server-v0.3.6-7b7d6c7576-74vlr                        2/2     Running   0          74m
+kube-system     pod/prometheus-to-sd-dv9tg                                        1/1     Running   0          5m12s
+kube-system     pod/prometheus-to-sd-hdzjq                                        1/1     Running   0          75m
+kube-system     pod/prometheus-to-sd-mdgrc                                        1/1     Running   0          75m
+kube-system     pod/prometheus-to-sd-st5gl                                        1/1     Running   0          75m
+kube-system     pod/stackdriver-metadata-agent-cluster-level-5587bb9786-tqnwh     2/2     Running   0          73m
+nginx-ingress   pod/nginx-ingress-controller-5ddbdf4fc9-twhss                     1/1     Running   0          64m
+nginx-ingress   pod/nginx-ingress-default-backend-5b967cf596-lk9qw                1/1     Running   0          64m
+
+NAMESPACE       NAME                                    TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)                      AGE
+cert-manager    service/cert-manager-webhook            ClusterIP      10.27.255.190   <none>          443/TCP                      52m
+default         service/kubernetes                      ClusterIP      10.27.240.1     <none>          443/TCP                      80m
+hipster-shop    service/adservice                       ClusterIP      10.27.255.210   <none>          9555/TCP                     5m53s
+hipster-shop    service/cartservice                     ClusterIP      10.27.242.183   <none>          7070/TCP                     5m53s
+hipster-shop    service/checkoutservice                 ClusterIP      10.27.253.187   <none>          5050/TCP                     5m53s
+hipster-shop    service/currencyservice                 ClusterIP      10.27.253.200   <none>          7000/TCP                     5m53s
+hipster-shop    service/emailservice                    ClusterIP      10.27.246.39    <none>          5000/TCP                     5m53s
+hipster-shop    service/frontend                        NodePort       10.27.255.155   <none>          80:30405/TCP                 40s
+hipster-shop    service/paymentservice                  ClusterIP      10.27.253.66    <none>          50051/TCP                    5m53s
+hipster-shop    service/productcatalogservice           ClusterIP      10.27.246.141   <none>          3550/TCP                     5m53s
+hipster-shop    service/recommendationservice           ClusterIP      10.27.252.39    <none>          8080/TCP                     5m53s
+hipster-shop    service/redis-cart                      ClusterIP      10.27.246.177   <none>          6379/TCP                     5m53s
+hipster-shop    service/shippingservice                 ClusterIP      10.27.254.86    <none>          50051/TCP                    5m53s
+kube-system     service/calico-typha                    ClusterIP      10.27.253.150   <none>          5473/TCP                     79m
+kube-system     service/default-http-backend            NodePort       10.27.254.91    <none>          80:30241/TCP                 79m
+kube-system     service/kube-dns                        ClusterIP      10.27.240.10    <none>          53/UDP,53/TCP                79m
+kube-system     service/metrics-server                  ClusterIP      10.27.255.250   <none>          443/TCP                      79m
+nginx-ingress   service/nginx-ingress-controller        LoadBalancer   10.27.247.60    34.105.123.69   80:30626/TCP,443:31033/TCP   64m
+nginx-ingress   service/nginx-ingress-default-backend   ClusterIP      10.27.253.223   <none>          80/TCP                       64m
+
+NAMESPACE     NAME                                       DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                                             AGE
+kube-system   daemonset.apps/calico-node                 4         4         4       4            4           beta.kubernetes.io/os=linux,projectcalico.org/ds-ready=true               79m
+kube-system   daemonset.apps/fluentd-gke                 4         4         4       4            4           beta.kubernetes.io/os=linux                                               79m
+kube-system   daemonset.apps/gke-metrics-agent           4         4         4       4            4           kubernetes.io/os=linux                                                    79m
+kube-system   daemonset.apps/gke-metrics-agent-windows   0         0         0       0            0           kubernetes.io/os=windows                                                  79m
+kube-system   daemonset.apps/ip-masq-agent               4         4         4       4            4           beta.kubernetes.io/os=linux,node.kubernetes.io/masq-agent-ds-ready=true   79m
+kube-system   daemonset.apps/kube-proxy                  0         0         0       0            0           beta.kubernetes.io/os=linux,node.kubernetes.io/kube-proxy-ds-ready=true   79m
+kube-system   daemonset.apps/metadata-proxy-v0.1         0         0         0       0            0           beta.kubernetes.io/os=linux,cloud.google.com/metadata-proxy-ready=true    79m
+kube-system   daemonset.apps/nvidia-gpu-device-plugin    0         0         0       0            0           <none>                                                                    79m
+kube-system   daemonset.apps/prometheus-to-sd            4         4         4       4            4           beta.kubernetes.io/os=linux                                               79m
+
+NAMESPACE       NAME                                                       READY   UP-TO-DATE   AVAILABLE   AGE
+cert-manager    deployment.apps/cert-manager                               1/1     1            1           52m
+cert-manager    deployment.apps/cert-manager-cainjector                    1/1     1            1           52m
+cert-manager    deployment.apps/cert-manager-webhook                       1/1     1            1           52m
+hipster-shop    deployment.apps/adservice                                  1/1     1            1           5m53s
+hipster-shop    deployment.apps/cartservice                                1/1     1            1           5m53s
+hipster-shop    deployment.apps/checkoutservice                            1/1     1            1           5m53s
+hipster-shop    deployment.apps/currencyservice                            1/1     1            1           5m53s
+hipster-shop    deployment.apps/emailservice                               1/1     1            1           5m53s
+hipster-shop    deployment.apps/frontend                                   1/1     1            1           39s
+hipster-shop    deployment.apps/paymentservice                             1/1     1            1           5m53s
+hipster-shop    deployment.apps/productcatalogservice                      1/1     1            1           5m53s
+hipster-shop    deployment.apps/recommendationservice                      1/1     1            1           5m53s
+hipster-shop    deployment.apps/redis-cart                                 1/1     1            1           5m53s
+hipster-shop    deployment.apps/shippingservice                            1/1     1            1           5m53s
+kube-system     deployment.apps/calico-node-vertical-autoscaler            1/1     1            1           79m
+kube-system     deployment.apps/calico-typha                               1/1     1            1           79m
+kube-system     deployment.apps/calico-typha-horizontal-autoscaler         1/1     1            1           79m
+kube-system     deployment.apps/calico-typha-vertical-autoscaler           1/1     1            1           79m
+kube-system     deployment.apps/event-exporter-gke                         1/1     1            1           79m
+kube-system     deployment.apps/fluentd-gke-scaler                         1/1     1            1           79m
+kube-system     deployment.apps/kube-dns                                   2/2     2            2           79m
+kube-system     deployment.apps/kube-dns-autoscaler                        1/1     1            1           79m
+kube-system     deployment.apps/l7-default-backend                         1/1     1            1           79m
+kube-system     deployment.apps/metrics-server-v0.3.6                      1/1     1            1           79m
+kube-system     deployment.apps/stackdriver-metadata-agent-cluster-level   1/1     1            1           79m
+nginx-ingress   deployment.apps/nginx-ingress-controller                   1/1     1            1           64m
+nginx-ingress   deployment.apps/nginx-ingress-default-backend              1/1     1            1           64m
+
+NAMESPACE       NAME                                                                  DESIRED   CURRENT   READY   AGE
+cert-manager    replicaset.apps/cert-manager-5466dd7cf6                               1         1         1       53m
+cert-manager    replicaset.apps/cert-manager-cainjector-6f567dc88f                    1         1         1       53m
+cert-manager    replicaset.apps/cert-manager-webhook-67cc6df6                         1         1         1       53m
+hipster-shop    replicaset.apps/adservice-55f9757757                                  1         1         1       5m54s
+hipster-shop    replicaset.apps/cartservice-7456d5d86d                                1         1         1       5m54s
+hipster-shop    replicaset.apps/checkoutservice-6fcc84467f                            1         1         1       5m54s
+hipster-shop    replicaset.apps/currencyservice-8b7b8c647                             1         1         1       5m54s
+hipster-shop    replicaset.apps/emailservice-6c46854ccc                               1         1         1       5m54s
+hipster-shop    replicaset.apps/frontend-745f64f8b6                                   1         1         1       40s
+hipster-shop    replicaset.apps/paymentservice-76654769f7                             1         1         1       5m54s
+hipster-shop    replicaset.apps/productcatalogservice-d564bdf4c                       1         1         1       5m54s
+hipster-shop    replicaset.apps/recommendationservice-76598d5889                      1         1         1       5m54s
+hipster-shop    replicaset.apps/redis-cart-5f59546cdd                                 1         1         1       5m54s
+hipster-shop    replicaset.apps/shippingservice-b6db65f7f                             1         1         1       5m54s
+kube-system     replicaset.apps/calico-node-vertical-autoscaler-bcc7978d              1         1         1       79m
+kube-system     replicaset.apps/calico-typha-5cdd59dc44                               1         1         1       74m
+kube-system     replicaset.apps/calico-typha-6d7788c45                                0         0         0       79m
+kube-system     replicaset.apps/calico-typha-horizontal-autoscaler-7cd7856b7b         1         1         1       79m
+kube-system     replicaset.apps/calico-typha-vertical-autoscaler-7c4b89c9             1         1         1       79m
+kube-system     replicaset.apps/event-exporter-gke-59b99fdd9c                         1         1         1       79m
+kube-system     replicaset.apps/fluentd-gke-scaler-cd4d654d7                          1         1         1       79m
+kube-system     replicaset.apps/kube-dns-7c976ddbdb                                   2         2         2       79m
+kube-system     replicaset.apps/kube-dns-autoscaler-645f7d66cf                        1         1         1       79m
+kube-system     replicaset.apps/l7-default-backend-678889f899                         1         1         1       79m
+kube-system     replicaset.apps/metrics-server-v0.3.6-7b7d6c7576                      1         1         1       74m
+kube-system     replicaset.apps/metrics-server-v0.3.6-7dbf8647f6                      0         0         0       79m
+kube-system     replicaset.apps/stackdriver-metadata-agent-cluster-level-5587bb9786   1         1         1       73m
+kube-system     replicaset.apps/stackdriver-metadata-agent-cluster-level-8655f48f8    0         0         0       79m
+nginx-ingress   replicaset.apps/nginx-ingress-controller-5ddbdf4fc9                   1         1         1       64m
+nginx-ingress   replicaset.apps/nginx-ingress-default-backend-5b967cf596              1         1         1       64m
+
+
+
+
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install frontend kubernetes-temp/frontend --namespace hipster-shop
+Release "frontend" has been upgraded. Happy Helming!
+NAME: frontend
+LAST DEPLOYED: Fri Aug 14 10:40:50 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 2
+TEST SUITE: None
+garry@home-pc:~/devops_learn/kuber$ helm delete --purge frontend
+Error: unknown flag: --purge
+garry@home-pc:~/devops_learn/kuber$ helm delete frontend
+Error: uninstall: Release not loaded: frontend: release: not found
+
+
+
+garry@home-pc:~/devops_learn/kuber$ helm uninstall frontend --namespace hipster-shop
+release "frontend" uninstalled
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/socks-shop/requirements.yaml
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-templating/socks-shop
+Error: could not find kubernetes-templating/socks-shop: stat kubernetes-templating/socks-shop: no such file or directory
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-templ/socks-shop
+Error: could not find kubernetes-templ/socks-shop: stat kubernetes-templ/socks-shop: no such file or directory
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-temp/socks-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+Saving 1 charts
+Deleting outdated charts
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-temp/socks-shop/charts/
+Error: validation: chart.metadata is required
+garry@home-pc:~/devops_learn/kuber$ ls kubernetes-temp/socks-shop/charts/
+frontend-0.1.0.tgz
+garry@home-pc:~/devops_learn/kuber$ helm dep --help
+
+Manage the dependencies of a chart.
+
+Helm charts store their dependencies in 'charts/'. For chart developers, it is
+often easier to manage dependencies in 'Chart.yaml' which declares all
+dependencies.
+
+The dependency commands operate on that file, making it easy to synchronize
+between the desired dependencies and the actual dependencies stored in the
+'charts/' directory.
+
+For example, this Chart.yaml declares two dependencies:
+
+    # Chart.yaml
+    dependencies:
+    - name: nginx
+      version: "1.2.3"
+      repository: "https://example.com/charts"
+    - name: memcached
+      version: "3.2.1"
+      repository: "https://another.example.com/charts"
+
+
+The 'name' should be the name of a chart, where that name must match the name
+in that chart's 'Chart.yaml' file.
+
+The 'version' field should contain a semantic version or version range.
+
+The 'repository' URL should point to a Chart Repository. Helm expects that by
+appending '/index.yaml' to the URL, it should be able to retrieve the chart
+repository's index. Note: 'repository' can be an alias. The alias must start
+with 'alias:' or '@'.
+
+Starting from 2.2.0, repository can be defined as the path to the directory of
+the dependency charts stored locally. The path should start with a prefix of
+"file://". For example,
+
+    # Chart.yaml
+    dependencies:
+    - name: nginx
+      version: "1.2.3"
+      repository: "file://../dependency_chart/nginx"
+
+If the dependency chart is retrieved locally, it is not required to have the
+repository added to helm by "helm add repo". Version matching is also supported
+for this case.
+
+Usage:
+  helm dependency [command]
+
+Aliases:
+  dependency, dep, dependencies
+
+Available Commands:
+  build       rebuild the charts/ directory based on the Chart.lock file
+  list        list the dependencies for the given chart
+  update      update charts/ based on the contents of Chart.yaml
+
+Flags:
+  -h, --help   help for dependency
+
+Global Flags:
+      --add-dir-header                   If true, adds the file directory to the header
+      --alsologtostderr                  log to standard error as well as files
+      --debug                            enable verbose output
+      --kube-apiserver string            the address and the port for the Kubernetes API server
+      --kube-context string              name of the kubeconfig context to use
+      --kube-token string                bearer token used for authentication
+      --kubeconfig string                path to the kubeconfig file
+      --log-backtrace-at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
+      --log-dir string                   If non-empty, write log files in this directory
+      --log-file string                  If non-empty, use this log file
+      --log-file-max-size uint           Defines the maximum size a log file can grow to. Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800)
+      --logtostderr                      log to standard error instead of files (default true)
+  -n, --namespace string                 namespace scope for this request
+      --registry-config string           path to the registry config file (default "/home/garry/.config/helm/registry.json")
+      --repository-cache string          path to the file containing cached repository indexes (default "/home/garry/.cache/helm/repository")
+      --repository-config string         path to the file containing repository names and URLs (default "/home/garry/.config/helm/repositories.yaml")
+      --skip-headers                     If true, avoid header prefixes in the log messages
+      --skip-log-headers                 If true, avoid headers when opening log files
+      --stderrthreshold severity         logs at or above this threshold go to stderr (default 2)
+  -v, --v Level                          number for the log level verbosity
+      --vmodule moduleSpec               comma-separated list of pattern=N settings for file-filtered logging
+
+Use "helm dependency [command] --help" for more information about a command.
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/frontend/templates/service.yaml:9:18: executing "socks-shop/charts/frontend/templates/service.yaml" at <.Values.service.type>: nil pointer evaluating interface {}.type
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-temp/socks-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+Saving 1 charts
+Deleting outdated charts
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Release "socks-shop" has been upgraded. Happy Helming!
+NAME: socks-shop
+LAST DEPLOYED: Fri Aug 14 11:26:01 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 2
+TEST SUITE: None
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop --set frontend.service.NodePort=31234
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Release "socks-shop" has been upgraded. Happy Helming!
+NAME: socks-shop
+LAST DEPLOYED: Fri Aug 14 11:29:14 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 3
+TEST SUITE: None
+garry@home-pc:~/devops_learn/kuber$ ды
+^C
+garry@home-pc:~/devops_learn/kuber$ ls
+kuber-controllers  kubernetes-intro  kubernetes-networks  kubernetes-temp  kuber-security  kuber-volumes  microservices-demo  README.md  terraform
+garry@home-pc:~/devops_learn/kuber$ mkdir kubernetes-temp/redis
+garry@home-pc:~/devops_learn/kuber$ helm create kubernetes-temp/redis
+Creating kubernetes-temp/redis
+garry@home-pc:~/devops_learn/kuber$ ls kubernetes-temp/redis
+charts  Chart.yaml  templates  values.yaml
+garry@home-pc:~/devops_learn/kuber$ ls kubernetes-temp/redis/templates/
+deployment.yaml  _helpers.tpl  hpa.yaml  ingress.yaml  NOTES.txt  serviceaccount.yaml  service.yaml  tests
+garry@home-pc:~/devops_learn/kuber$ rm -rf kubernetes-temp/redis/templates/*
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/
+cert-manager/ chartmuseum/  frontend/     harbor/       helmfile/     redis/        socks-shop/   
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/socks-shop/
+Chart.lock         charts/            Chart.yaml         .helmignore        requirements.yaml  templates/         
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/socks-shop/requirements.yaml 
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-temp/socks-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+Saving 2 charts
+Deleting outdated charts
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/redis/templates/service.yaml:7:18: executing "socks-shop/charts/redis/templates/service.yaml" at <.Values.service.type>: nil pointer evaluating interface {}.type
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/redis/templates/service.yaml:7:18: executing "socks-shop/charts/redis/templates/service.yaml" at <.Values.service.type>: nil pointer evaluating interface {}.type
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-temp/socks-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+Saving 2 charts
+Deleting outdated charts
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/redis/templates/service.yaml:7:12: executing "socks-shop/charts/redis/templates/service.yaml" at <$.Values.service.type>: nil pointer evaluating interface {}.type
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-temp/socks-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+^[[ASaving 2 charts
+Deleting outdated charts
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/redis/templates/service.yaml:12:20: executing "socks-shop/charts/redis/templates/service.yaml" at <.Values.service.port>: nil pointer evaluating interface {}.port
+garry@home-pc:~/devops_learn/kuber$ ls
+kuber-controllers  kubernetes-intro  kubernetes-networks  kubernetes-temp  kuber-security  kuber-volumes  microservices-demo  README.md  terraform
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/
+cert-manager/ chartmuseum/  frontend/     harbor/       helmfile/     redis/        socks-shop/   
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/socks-shop/requirements.yaml 
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/redis/templates/service.yaml:12:20: executing "socks-shop/charts/redis/templates/service.yaml" at <.Values.service.port>: nil pointer evaluating interface {}.port
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/socks-shop/requirements.yaml 
+garry@home-pc:~/devops_learn/kuber$ vi kubernetes-temp/socks-shop/Chart.yaml 
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/redis/templates/service.yaml:12:20: executing "socks-shop/charts/redis/templates/service.yaml" at <.Values.service.port>: nil pointer evaluating interface {}.port
+garry@home-pc:~/devops_learn/kuber$ ls
+kuber-controllers  kubernetes-intro  kubernetes-networks  kubernetes-temp  kuber-security  kuber-volumes  microservices-demo  README.md  terraform
+garry@home-pc:~/devops_learn/kuber$ cd kubernetes-networks/
+garry@home-pc:~/devops_learn/kuber/kubernetes-networks$ cd ..
+garry@home-pc:~/devops_learn/kuber$ cd kubernetes-temp/
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ ls
+cert-manager  chartmuseum  frontend  harbor  helmfile  redis  socks-shop
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ vi socks-shop/
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ vi socks-shop/
+Chart.lock         charts/            Chart.yaml         .helmignore        requirements.yaml  templates/         
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ vi socks-shop/templates/all.y
+all.yaml  all.yml   
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ vi socks-shop/templates/all.yml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ cd socks-shop/templates/all.yml
+bash: cd: socks-shop/templates/all.yml: Это не каталог
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ cd socks-shop/templates/
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ ls
+all.yaml  all.yml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ vi all.yml 
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ vi all.yaml 
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ rm -rf all.yml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ ls
+all.yaml
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop/templates$ cd ..
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp/socks-shop$ cd ..
+garry@home-pc:~/devops_learn/kuber/kubernetes-temp$ cd ..
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Error: UPGRADE FAILED: template: socks-shop/charts/redis/templates/service.yaml:12:20: executing "socks-shop/charts/redis/templates/service.yaml" at <.Values.service.port>: nil pointer evaluating interface {}.port
+garry@home-pc:~/devops_learn/kuber$ ls
+kuber-controllers  kubernetes-intro  kubernetes-networks  kubernetes-temp  kuber-security  kuber-volumes  microservices-demo  README.md  terraform
+garry@home-pc:~/devops_learn/kuber$ mv kubernetes-temp/socks-shop/charts/redis-0.1.0.tgz /home/garry/
+garry@home-pc:~/devops_learn/kuber$ mv kubernetes-temp/socks-shop/charts/redis /home/garry/
+mv: не удалось выполнить stat для 'kubernetes-temp/socks-shop/charts/redis': Нет такого файла или каталога
+garry@home-pc:~/devops_learn/kuber$ mv -r kubernetes-temp/socks-shop/charts/redis /home/garry/
+mv: неверный ключ — «r»
+По команде «mv --help» можно получить дополнительную информацию.
+
+
+   
+garry@home-pc:~/devops_learn/kuber$ mv kubernetes-temp/socks-shop/charts/frontend-0.1.0.tgz 
+.git/                kubernetes-intro/    kubernetes-temp/     kuber-volumes/       README.md            
+kuber-controllers/   kubernetes-networks/ kuber-security/      microservices-demo/  terraform/           
+garry@home-pc:~/devops_learn/kuber$ mv kubernetes-temp/socks-shop/charts/frontend-0.1.0.tgz 
+.git/                kubernetes-intro/    kubernetes-temp/     kuber-volumes/       README.md            
+kuber-controllers/   kubernetes-networks/ kuber-security/      microservices-demo/  terraform/           
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+^C
+garry@home-pc:~/devops_learn/kuber$ helm dep update kubernetes-temp/socks-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "harbor" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
+Saving 1 charts
+Deleting outdated charts
+
+
+
+garry@home-pc:~/devops_learn/kuber$ helm upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Release "socks-shop" has been upgraded. Happy Helming!
+NAME: socks-shop
+LAST DEPLOYED: Fri Aug 14 14:03:49 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 5
+TEST SUITE: None
+
+
+
+
+
+
+
+
+
+
+
+### Helm-secrets
+https://habr.com/ru/company/southbridge/blog/336118/
+
+Установка brew на linux, так как соответствие пакетов искать лениво было
+```                            
+garry@home-pc:~/devops_learn/kuber$  sh -c "$(curl -fsSL https://raw.githubusercontent.com/Linuxbrew/install/master/install.sh)"
+```
+
+
+
+brew install sops
+brew install gnupg2
+brew install gnu-getopt
+
+
+
+Установка плагина helm-secrets
+```
+garry@home-pc:~/devops_learn/kuber$ helm plugin install https://github.com/futuresimple/helm-secrets --version 2.0.2
+sops is already installed:
+sops 3.6.0 (latest)
+Installed plugin: secrets
+garry@home-pc:~/devops_learn/kuber$ gpg --full-generate-key
+gpg (GnuPG) 2.2.4; Copyright (C) 2017 Free Software Foundation, Inc.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+gpg: создан щит с ключами '/home/garry/.gnupg/pubring.kbx'
+Выберите тип ключа:
+   (1) RSA и RSA (по умолчанию)
+   (2) DSA и Elgamal
+   (3) DSA (только для подписи)
+   (4) RSA (только для подписи)
+Ваш выбор? 1
+длина ключей RSA может быть от 1024 до 4096.
+Какой размер ключа Вам необходим? (3072) 2048
+Запрошенный размер ключа - 2048 бит
+Выберите срок действия ключа.
+         0 = не ограничен
+      <n>  = срок действия ключа - n дней
+      <n>w = срок действия ключа - n недель
+      <n>m = срок действия ключа - n месяцев
+      <n>y = срок действия ключа - n лет
+Срок действия ключа? (0) 0
+Срок действия ключа не ограничен
+Все верно? (y/N) y
+
+GnuPG должен составить идентификатор пользователя для идентификации ключа.
+
+Ваше полное имя: Igor
+Имя не должно быть короче 5 символов
+Ваше полное имя: IgorDzyuin
+Адрес электронной почты: igordzu@yandex.ru
+Примечание: 
+Вы выбрали следующий идентификатор пользователя:
+    "IgorDzyuin <igordzu@yandex.ru>"
+
+Сменить (N)Имя, (C)Примечание, (E)Адрес; (O)Принять/(Q)Выход? O
+Необходимо получить много случайных чисел. Желательно, чтобы Вы
+в процессе генерации выполняли какие-то другие действия (печать
+на клавиатуре, движения мыши, обращения к дискам); это даст генератору
+случайных чисел больше возможностей получить достаточное количество энтропии.
+Необходимо получить много случайных чисел. Желательно, чтобы Вы
+в процессе генерации выполняли какие-то другие действия (печать
+на клавиатуре, движения мыши, обращения к дискам); это даст генератору
+случайных чисел больше возможностей получить достаточное количество энтропии.
+gpg: /home/garry/.gnupg/trustdb.gpg: создана таблица доверия
+gpg: ключ AAFEBC1FD8760381 помечен как абсолютно доверенный
+gpg: создан каталог '/home/garry/.gnupg/openpgp-revocs.d'
+gpg: сертификат отзыва записан в '/home/garry/.gnupg/openpgp-revocs.d/4795FE43AC6BCD7A5376B5A3AAFEBC1FD8760381.rev'.
+открытый и секретный ключи созданы и подписаны.
+
+pub   rsa2048 2020-08-14 [SC]
+      4795FE43AC6BCD7A5376B5A3AAFEBC1FD8760381
+uid                      IgorDzyuin <igordzu@yandex.ru>
+sub   rsa2048 2020-08-14 [E]
+
+
+Это хеш - 4795FE43AC6BCD7A5376B5A3AAFEBC1FD8760381
+
+```
+garry@home-pc:~/devops_learn/kuber$ gpg -k
+gpg: проверка таблицы доверия
+gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+gpg: глубина: 0  достоверных:   1  подписанных:   0  доверие: 0-, 0q, 0n, 0m, 0f, 1u
+/home/garry/.gnupg/pubring.kbx
+------------------------------
+pub   rsa2048 2020-08-14 [SC]
+      4795FE43AC6BCD7A5376B5A3AAFEBC1FD8760381
+uid         [  абсолютно ] IgorDzyuin <igordzu@yandex.ru>
+sub   rsa2048 2020-08-14 [E]
+```
+
+
+
+Шифруем файл
+```
+garry@home-pc:~/devops_learn/kuber$ sops -e -i --pgp 4795FE43AC6BCD7A5376B5A3AAFEBC1FD8760381 kubernetes-temp/frontend/secrets.yaml
+
+garry@home-pc:~/devops_learn/kuber$ helm secrets view kubernetes-temp/frontend/secrets.yaml
+visibleKey: hiddenValue
+garry@home-pc:~/devops_learn/kuber$ sops -d kubernetes-temp/frontend/secrets.yaml
+visibleKey: hiddenValue
+```
+
+
+
+
+
+
+
+
+Устанавливаем секрет
+```
+garry@home-pc:~/devops_learn/kuber$ helm secrets upgrade --install socks-shop kubernetes-temp/socks-shop --namespace hipster-shop -f kubernetes-temp/frontend/secrets.yaml -f kubernetes-temp/frontend/values.yaml
+load.go:112: Warning: Dependencies are handled in Chart.yaml since apiVersion "v2". We recommend migrating dependencies to Chart.yaml.
+Release "socks-shop" has been upgraded. Happy Helming!
+NAME: socks-shop
+LAST DEPLOYED: Fri Aug 14 16:32:21 2020
+NAMESPACE: hipster-shop
+STATUS: deployed
+REVISION: 8
+TEST SUITE: None
+удалён 'kubernetes-temp/frontend/secrets.yaml.dec'
+```
+
+
+
+
+
+Вывод секрета в yml (почему пустой?)
+```
+garry@home-pc:~/devops_learn/kuber$ kubectl get secret/secret -n hipster-shop -o yaml
+apiVersion: v1
+data:
+  visibleKey: ""
+kind: Secret
+metadata:
+  annotations:
+    meta.helm.sh/release-name: socks-shop
+    meta.helm.sh/release-namespace: hipster-shop
+  creationTimestamp: "2020-08-14T13:27:54Z"
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  name: secret
+  namespace: hipster-shop
+  resourceVersion: "154335"
+  selfLink: /api/v1/namespaces/hipster-shop/secrets/secret
+  uid: 17d9feb7-a350-4704-95e5-a4486c4eb228
+type: Opaque
+```
+
+Смотрим наличие секрета
+```
+garry@home-pc:~/devops_learn/kuber$ kubectl get secrets -n hipster-shop
+NAME                               TYPE                                  DATA   AGE
+default-token-b7v2s                kubernetes.io/service-account-token   3      6h23m
+frontend-tls                       kubernetes.io/tls                     3      6h5m
+secret                             Opaque                                1      4m59s
+sh.helm.release.v1.socks-shop.v1   helm.sh/release.v1                    1      6h11m
+sh.helm.release.v1.socks-shop.v2   helm.sh/release.v1                    1      5h6m
+sh.helm.release.v1.socks-shop.v3   helm.sh/release.v1                    1      5h3m
+sh.helm.release.v1.socks-shop.v4   helm.sh/release.v1                    1      149m
+sh.helm.release.v1.socks-shop.v5   helm.sh/release.v1                    1      149m
+sh.helm.release.v1.socks-shop.v6   helm.sh/release.v1                    1      77m
+sh.helm.release.v1.socks-shop.v7   helm.sh/release.v1                    1      5m
+sh.helm.release.v1.socks-shop.v8   helm.sh/release.v1                    1      31s
+garry@home-pc:~/devops_learn/kuber$ sops -d kubernetes-temp/frontend/secrets.yaml
+visibleKey: hiddenValue
+```
+
+
+Удаляем кластер
+```
+garry@home-pc:~/devops_learn/kuber$ cd terraform/
+garry@home-pc:~/devops_learn/kuber/terraform$ terraform destroy
+google_container_cluster.garry-cluster: Refreshing state... [id=k8s-platform]
+google_container_node_pool.garry-node_pool: Refreshing state... [id=us-west1/k8s-platform/k8s-platform-pool]
+```

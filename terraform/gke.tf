@@ -32,7 +32,7 @@ resource "google_container_cluster" "garry-cluster" {
 
 resource google_container_node_pool "garry-node_pool" {
   name               = var.gcp_pool_name
-  location           = google_container_cluster.cluster.location
+  location           = google_container_cluster.garry-cluster.location
   cluster            = google_container_cluster.garry-cluster.name
   initial_node_count = 1
   autoscaling {
