@@ -1,0 +1,8 @@
+prometheus:
+  prometheusSpec:
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelectorNilUsesHelmValues: false
+  serviceMonitorSelector: {}
+  ## Example which selects ServiceMonitors with label "prometheus" set to "somelabel"
+grafana:
+  adminPassword: Nexponka

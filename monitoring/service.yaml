@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: web
+  labels:
+    app: web
+    prometheus: default
+spec:
+  selector:
+    app: web
+  type: ClusterIP
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
+    - protocol: TCP
+      port: 9113
+      targetPort: 9113
+      name: metrics

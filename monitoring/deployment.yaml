@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+     app: web
+  template:
+    metadata:
+      name: web
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: garry1287/nginx:v0.0.2
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        livenessProbe:
+          tcpSocket:
+            port: 8000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+        ports:
+          - containerPort: 8000
+            name: http
+      - name: nginx-exporter
+        image: nginx/nginx-prometheus-exporter:0.8.0
+        args:
+        - "-nginx.scrape-uri"
+        - "http://localhost:8000/basic_status"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        ports:
+          - containerPort: 9113
+            name: metrics

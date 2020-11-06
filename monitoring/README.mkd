@@ -1,0 +1,164 @@
+
+stable              	https://kubernetes-charts.storage.googleapis.com/ 
+jetstack            	https://charts.jetstack.io                        
+harbor              	https://helm.goharbor.io                          
+prometheus-community	https://prometheus-community.github.io/helm-charts
+
+
+
+
+export KUBECONFIG=~/.kube/config:/home/garry/devops_learn/kubespray/inventory/mycluster/artifacts/admin.conf
+source <(kubectl completion bash)
+
+
+wget https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml
+kubectl apply -f 00-crds.yaml
+
+kubectl create ns cert-manager
+
+kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"
+
+helm pull jetstack/cert-manager --untar
+helm upgrade --install cert-manager jetstack/cert-manager --wait --namespace=cert-manager --version=0.9.0
+
+---
+
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+
+helm search repo https://kubernetes.github.io/ingress-nginx
+
+helm search repo ingress-nginx
+NAME                       	CHART VERSION	APP VERSION	DESCRIPTION                                       
+ingress-nginx/ingress-nginx	3.7.1        	0.40.2     	Ingress controller for Kubernetes using NGINX a...
+
+
+
+helm pull ingress-nginx/ingress-nginx --untar
+kubectl create ns ingress-nginx
+
+ helm upgrade --install ingress-nginx ./ingress-nginx --set controller.service.type="",controller.kind=DaemonSet --namespace ingress-nginx
+
+
+--------------------------------
+helm show values prometheus-community/kube-prometheus-stack
+
+
+helm pull prometheus-community/kube-prometheus-stack --untar
+kubectl create ns prometheus
+helm upgrade --install prometheus-operator ./kube-prometheus-stack  --namespace=prometheus
+
+
+helm uninstall prometheus-operator ./kube-prometheus-stack  --namespace=prometheus
+kubectl delete ns prometheus
+
+prometheus:
+  prometheusSpec:
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelectorNilUsesHelmValues: false
+  serviceMonitorSelector: {}
+  ## Example which selects ServiceMonitors with label "prometheus" set to "somelabel"
+grafana:
+  adminPassword: Nexponka
+
+
+
+kubectl port-forward  --namespace prometheus svc/prometheus-operator-grafana 8000:80
+
+
+Установка чарта
+helm3 upgrade --install application ./application --namespace=application
+
+---------------------
+Ошибочный ингресс
+
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: web
+  namespace: web
+  annotations:
+    nginx.ingress.kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+v    - host: web.192.168.1.216.xip.io 
+v    - http:
+        paths:
+          - path: /web
+            backend:
+              serviceName: web
+              servicePort: 8000
+
+
+Приводило к тому, что создавалось 2 ингресса по факту, обнаружить удалось только с помощью krew ingress-nginx 
+garry@home-pc:~$ kubectl ingress-nginx ingresses -n web
+INGRESS NAME   HOST+PATH                  ADDRESSES      TLS   SERVICE   SERVICE PORT   ENDPOINTS
+web            web.192.168.1.216.xip.io   10.100.44.61   NO                             N/A
+web            /                          10.100.44.61   NO    web       8000           3
+
+
+
+Вот верный конфиг
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: web
+  namespace: web
+  annotations:
+    nginx.ingress.kubernetes.io/ingress.class: nginx
+#    nginx.ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: web.192.168.1.216.xip.io
+      http:
+        paths:
+          - backend:
+              serviceName: web
+              servicePort: 8000
+            path: /
+
+https://kubernetes.github.io/ingress-nginx/troubleshooting/
+https://prohoster.info/blog/administrirovanie/vizualnoe-rukovodstvo-po-diagnostike-neispravnostej-v-kubernetes
+
+----------------------
+Запустилось
+
+
+
+
+
+metrici собираются
+kubectl port-forward svc/web 9113:9113 -n web
+
+http://localhost:9113/metrics
+
+# HELP nginx_connections_accepted Accepted client connections
+# TYPE nginx_connections_accepted counter
+nginx_connections_accepted 87175
+# HELP nginx_connections_active Active client connections
+# TYPE nginx_connections_active gauge
+nginx_connections_active 1
+# HELP nginx_connections_handled Handled client connections
+# TYPE nginx_connections_handled counter
+nginx_connections_handled 87175
+# HELP nginx_connections_reading Connections where NGINX is reading the request header
+# TYPE nginx_connections_reading gauge
+nginx_connections_reading 0
+# HELP nginx_connections_waiting Idle client connections
+# TYPE nginx_connections_waiting gauge
+nginx_connections_waiting 0
+# HELP nginx_connections_writing Connections where NGINX is writing the response back to the client
+# TYPE nginx_connections_writing gauge
+nginx_connections_writing 1
+# HELP nginx_http_requests_total Total http requests
+# TYPE nginx_http_requests_total counter
+nginx_http_requests_total 43595
+# HELP nginx_up Status of the last metric scrape
+# TYPE nginx_up gauge
+nginx_up 1
+# HELP nginxexporter_build_info Exporter build information
+# TYPE nginxexporter_build_info gauge
+nginxexporter_build_info{gitCommit="",version=""} 1
